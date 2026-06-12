@@ -18,7 +18,9 @@ from .generic_scraper import GenericScraper, scrape_career_page
 # New dynamic scraping modules
 from .dynamic_scraper import DynamicScraper, ScrapeResult
 from .ats_extractor import WorkdayExtractor, SuccessFactorsExtractor
-from .source_resolver import JobSourceResolver, JobSource, ResolverResult, resolve_job_sources
+from .source_resolver import JobSourceResolver, JobSource as SourceJobSource, ResolverResult, resolve_job_sources
+from .search_discovery import SearchJobDiscovery, SearchResult, search_jobs, search_company_jobs
+from .engine import JobIntelligenceEngine, ProfileConfig, PipelineResult, run_job_intelligence
 
 # Job boards
 from .job_boards import JobStreetCollector, GlintsCollector
@@ -55,9 +57,21 @@ __all__ = [
     
     # Job Source Resolution
     'JobSourceResolver',
-    'JobSource',
+    'SourceJobSource',
     'ResolverResult',
     'resolve_job_sources',
+    
+    # Search-Based Discovery
+    'SearchJobDiscovery',
+    'SearchResult',
+    'search_jobs',
+    'search_company_jobs',
+    
+    # Job Intelligence Engine
+    'JobIntelligenceEngine',
+    'ProfileConfig',
+    'PipelineResult',
+    'run_job_intelligence',
     
     # Job Boards
     'JobStreetCollector',

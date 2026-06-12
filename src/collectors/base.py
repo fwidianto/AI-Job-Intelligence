@@ -42,8 +42,14 @@ class Job:
     requirements: List[str] = field(default_factory=list)
     raw_data: Dict[str, Any] = field(default_factory=dict)  # Original data from API
     
+    # Matching results (populated by scoring engine)
+    match_score: int = 0  # 0-100
+    match_status: str = "NO"  # YES, MAYBE, NO
+    match_reasons: List[str] = field(default_factory=list)
+    matched_skills: List[str] = field(default_factory=list)
+    
     def __str__(self) -> str:
-        return f"Job({self.job_id}): {self.title} at {self.company}"
+        return f"Job({self.job_id}): {self.title} at {self.company} [{self.match_status}:{self.match_score}]"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert job to dictionary for storage"""
@@ -61,6 +67,10 @@ class Job:
             'posted_date': self.posted_date.isoformat() if self.posted_date else None,
             'skills': ', '.join(self.skills) if self.skills else '',
             'requirements': ', '.join(self.requirements) if self.requirements else '',
+            'match_score': self.match_score,
+            'match_status': self.match_status,
+            'match_reasons': '; '.join(self.match_reasons),
+            'matched_skills': ', '.join(self.matched_skills),
         }
     
     @classmethod
