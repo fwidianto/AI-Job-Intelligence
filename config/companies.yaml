@@ -3,10 +3,11 @@
 # ===========================================
 # Add companies you want to monitor for job opportunities
 # ATS Platform: greenhouse, lever, smartrecruiters, workday, other
+# Status: working, broken, manual (for validation)
 
 companies:
-  # === TIER 1: MNCs with Known ATS (Start Here) ===
-  
+  # === TIER 1: MNCs with Verified ATS ===
+
   - name: Unilever Indonesia
     industry: FMCG/Consumer Goods
     ats: greenhouse
@@ -14,53 +15,9 @@ companies:
     career_url: https://www.unilever.com/careers/
     jobs_url: https://unilever.greenhouse.io/jobs
     priority: 1
+    status: working
     notes: "Top employer, often has ERP/Business Analyst roles"
-    
-  - name: Nestlé Indonesia
-    industry: FMCG/Consumer Goods
-    ats: greenhouse
-    slug: nestle
-    career_url: https://www.nestle.com/careers
-    jobs_url: https://careers.nestle.com
-    priority: 1
-    notes: "SAP environment, regular openings for analysts"
-    
-  - name: Danone Indonesia
-    industry: FMCG/Consumer Goods
-    ats: workday
-    slug: danone
-    career_url: https://www.danone.com/careers
-    jobs_url: https://danone.workday.com
-    priority: 2
-    notes: "Uses Workday, check manually for jobs"
-    
-  - name: Grab Indonesia
-    industry: Technology/Super App
-    ats: lever
-    slug: grab
-    career_url: https://grab.com/careers/
-    jobs_url: https://grab.com/careers/
-    priority: 1
-    notes: "Operations and Business Analyst roles in demand"
-    
-  - name: Shopee Indonesia
-    industry: E-commerce
-    ats: lever
-    slug: shopee
-    career_url: https://shopee.co.id/careers
-    jobs_url: https://shopee.co.id/careers
-    priority: 1
-    notes: "Fast-growing, regular analyst openings"
-    
-  - name: GoTo Group
-    industry: Technology/E-commerce
-    ats: greenhouse
-    slug: goto
-    career_url: https://www.gotocompany.com/careers
-    jobs_url: https://www.gotocompany.com/careers
-    priority: 1
-    notes: "Gojek + Tokopedia merger, many opportunities"
-    
+
   - name: DHL Indonesia
     industry: Logistics
     ats: smartrecruiters
@@ -68,37 +25,113 @@ companies:
     career_url: https://www.dhl.com/id/en/careers.html
     jobs_url: https://careers.dhl.com
     priority: 2
+    status: unverified
     notes: "Supply chain and operations roles"
-    
-  - name: Toyota Astra Financial
-    industry: Automotive
-    ats: workday
-    slug: toyota
-    career_url: https://www.toyota.co.id/careers
-    jobs_url: https://www.toyota.co.id/careers
-    priority: 2
-    notes: "Enterprise company, check for finance/operations roles"
-    
-  # === TIER 2: Large Indonesian Companies ===
-  
-  - name: Astra International
-    industry: Conglomerate/Automotive
-    ats: workday
-    slug: astra
-    career_url: https://www.astragroup.co.id/career
-    jobs_url: https://www.astragroup.co.id/career
-    priority: 2
-    notes: "Large conglomerate, multiple divisions"
-    
+
+  # === TIER 2: Companies with Known Broken ATS (mark as 'other' for manual) ===
+
+  - name: Nestlé Indonesia
+    industry: FMCG/Consumer Goods
+    ats: other  # BROKEN: Was greenhouse, Nestlé uses custom careers site
+    slug: nestle
+    career_url: https://www.nestle.com/careers
+    jobs_url: https://www.nestle.com/careers
+    priority: 1
+    status: broken
+    notes: "Custom careers site - check manually"
+
+  - name: Grab Indonesia
+    industry: Technology/Super App
+    ats: other  # BROKEN: Lever no longer used
+    slug: grab
+    career_url: https://grab.com/careers/
+    jobs_url: https://grab.com/careers/
+    priority: 1
+    status: broken
+    notes: "Custom careers site - check manually"
+
+  - name: Shopee Indonesia
+    industry: E-commerce
+    ats: other  # BROKEN: Lever no longer used
+    slug: shopee
+    career_url: https://shopee.co.id/careers
+    jobs_url: https://shopee.co.id/careers
+    priority: 1
+    status: broken
+    notes: "Custom careers site - check manually"
+
+  - name: GoTo Group
+    industry: Technology/E-commerce
+    ats: other  # BROKEN: Was greenhouse, now custom
+    slug: goto
+    career_url: https://www.gotocompany.com/careers
+    jobs_url: https://www.gotocompany.com/careers
+    priority: 1
+    status: broken
+    notes: "Custom careers site - check manually"
+
+  - name: SAP Indonesia
+    industry: IT/Enterprise Software
+    ats: other  # BROKEN: SAP uses custom careers site
+    slug: sap
+    career_url: https://www.sap.com/indonesia/careers
+    jobs_url: https://www.sap.com/indonesia/careers
+    priority: 1
+    status: broken
+    notes: "Custom SAP careers site - check manually"
+
+  - name: Indofood
+    industry: FMCG/Food & Beverage
+    ats: other  # BROKEN: Not on Greenhouse
+    slug: indofood
+    career_url: https://www.indofood.com/career
+    jobs_url: https://www.indofood.com/career
+    priority: 3
+    status: broken
+    notes: "Custom careers site - check manually"
+
   - name: Bank BTPN
     industry: Banking/Finance
-    ats: greenhouse
+    ats: other  # BROKEN: Bank merged, different system
     slug: btpn
     career_url: https://www.btpn.com/career
     jobs_url: https://www.btpn.com/career
     priority: 2
-    notes: "Digital bank, tech-focused"
-    
+    status: broken
+    notes: "Merged with Bank Jago - check manually"
+
+  # === TIER 3: Companies Requiring Manual Check (Workday/Other) ===
+
+  - name: Danone Indonesia
+    industry: FMCG/Consumer Goods
+    ats: other  # Uses Workday but requires SSO
+    slug: danone
+    career_url: https://www.danone.com/careers
+    jobs_url: https://danone.workday.com
+    priority: 2
+    status: manual
+    notes: "Workday - check manually for jobs"
+
+  - name: Toyota Astra Financial
+    industry: Automotive
+    ats: other  # Workday with SSO
+    slug: toyota
+    career_url: https://www.toyota.co.id/careers
+    jobs_url: https://www.toyota.co.id/careers
+    priority: 2
+    status: manual
+    notes: "Workday - check manually"
+
+  - name: Astra International
+    industry: Conglomerate/Automotive
+    ats: other  # Workday with SSO
+    slug: astra
+    career_url: https://www.astragroup.co.id/career
+    jobs_url: https://www.astragroup.co.id/career
+    priority: 2
+    status: manual
+    notes: "Workday - check manually"
+
   - name: Bank Central Asia (BCA)
     industry: Banking/Finance
     ats: other
@@ -106,8 +139,9 @@ companies:
     career_url: https://www.bca.co.id/tentang-bca/karir
     jobs_url: https://www.bca.co.id/tentang-bca/karir
     priority: 2
-    notes: "Large bank, internal portal - check manually"
-    
+    status: manual
+    notes: "Internal portal - check manually"
+
   - name: Telekomunikasi Indonesia (Telkom)
     industry: Telecommunications
     ats: other
@@ -115,8 +149,9 @@ companies:
     career_url: https://careers.telkom.co.id
     jobs_url: https://careers.telkom.co.id
     priority: 2
-    notes: "State-owned, often has IT/Business Analyst roles"
-    
+    status: manual
+    notes: "State-owned - check manually"
+
   - name: Semen Indonesia
     industry: Manufacturing
     ats: other
@@ -124,66 +159,63 @@ companies:
     career_url: https://www.semenindonesia.com/career
     jobs_url: https://www.semenindonesia.com/career
     priority: 3
-    notes: "Manufacturing, ERP roles in demand"
-    
-  # === TIER 3: ERP Implementers & Consulting ===
-  
-  - name: SAP Indonesia
-    industry: IT/Enterprise Software
-    ats: greenhouse
-    slug: sap
-    career_url: https://www.sap.com/indonesia/careers
-    jobs_url: https://www.sap.com/indonesia/careers
-    priority: 1
-    notes: "Direct hire for SAP consultants/analysts"
-    
+    status: manual
+    notes: "Manufacturing - check manually"
+
+  # === TIER 4: Consulting Firms (Workday with SSO) ===
+
   - name: Accenture Indonesia
     industry: Consulting/IT Services
-    ats: workday
+    ats: other  # Workday with SSO
     slug: accenture
     career_url: https://www.accenture.com/id-en/careers
     jobs_url: https://www.accenture.com/id-en/careers
     priority: 1
-    notes: "ERP projects, SAP practice, business analyst roles"
-    
+    status: manual
+    notes: "Workday - check manually"
+
   - name: Deloitte Indonesia
     industry: Consulting/Audit
-    ats: workday
+    ats: other  # Workday with SSO
     slug: deloitte
     career_url: https://www2.deloitte.com/id/en/careers
     jobs_url: https://www2.deloitte.com/id/en/careers
     priority: 2
-    notes: "SAP consulting, finance consulting"
-    
+    status: manual
+    notes: "Workday - check manually"
+
   - name: PwC Indonesia
     industry: Consulting/Audit
-    ats: workday
+    ats: other  # Workday with SSO
     slug: pwc
     career_url: https://www.pwc.com/id/en/careers
     jobs_url: https://www.pwc.com/id/en/careers
     priority: 2
-    notes: "Finance and risk consulting"
-    
+    status: manual
+    notes: "Workday - check manually"
+
   - name: EY Indonesia
     industry: Consulting/Audit
-    ats: workday
+    ats: other  # Workday with SSO
     slug: ey
     career_url: https://www.ey.com/en_id/careers
     jobs_url: https://www.ey.com/en_id/careers
     priority: 2
-    notes: "Business advisory services"
-    
+    status: manual
+    notes: "Workday - check manually"
+
   - name: KPMG Indonesia
     industry: Consulting/Audit
-    ats: workday
+    ats: other  # Workday with SSO
     slug: kpmg
     career_url: https://home.kpmg/id/en/careers
     jobs_url: https://home.kpmg/id/en/careers
     priority: 2
-    notes: "Risk and compliance consulting"
-    
-  # === TIER 4: Additional High-Value Targets ===
-  
+    status: manual
+    notes: "Workday - check manually"
+
+  # === TIER 5: Additional Targets (Manual Check) ===
+
   - name: Mayora Indah
     industry: FMCG/Manufacturing
     ats: other
@@ -191,8 +223,9 @@ companies:
     career_url: https://www.mayora.com/career
     jobs_url: https://www.mayora.com/career
     priority: 3
-    notes: "Large FMCG, check manually"
-    
+    status: manual
+    notes: "Large FMCG - check manually"
+
   - name: Kalbe Farma
     industry: Pharmaceutical
     ats: other
@@ -200,8 +233,9 @@ companies:
     career_url: https://www.kalbe.co.id/career
     jobs_url: https://www.kalbe.co.id/career
     priority: 3
-    notes: "Pharmaceutical, ERP and finance roles"
-    
+    status: manual
+    notes: "Pharmaceutical - check manually"
+
   - name: Charoen Pokphand Indonesia
     industry: Agribusiness/FMCG
     ats: other
@@ -209,17 +243,9 @@ companies:
     career_url: https://www.cp.co.id/career
     jobs_url: https://www.cp.co.id/career
     priority: 3
-    notes: "Agribusiness conglomerate"
-    
-  - name: Indofood
-    industry: FMCG/Food & Beverage
-    ats: greenhouse
-    slug: indofood
-    career_url: https://www.indofood.com/career
-    jobs_url: https://www.indofood.com/career
-    priority: 3
-    notes: "Large FMCG group"
-    
+    status: manual
+    notes: "Agribusiness - check manually"
+
   - name: Japfa Comfeed
     industry: Agribusiness
     ats: other
@@ -227,7 +253,8 @@ companies:
     career_url: https://www.japfa.com/career
     jobs_url: https://www.japfa.com/career
     priority: 3
-    notes: "Agribusiness, manufacturing focus"
+    status: manual
+    notes: "Agribusiness - check manually"
 
 # ATS Platform reference:
 # - greenhouse: Use greenhouse collector (API available)
@@ -235,3 +262,9 @@ companies:
 # - smartrecruiters: Use smartrecruiters collector (API available)
 # - workday: Manual check required (complex SSO)
 # - other: Manual check required (custom sites)
+
+# Status values:
+# - working: Verified working with auto-collection
+# - broken: Previously configured but now broken
+# - manual: Requires manual checking (Workday/custom)
+# - unverified: Not tested yet

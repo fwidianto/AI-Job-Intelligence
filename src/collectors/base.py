@@ -188,15 +188,22 @@ class BaseCollector(ABC):
             CollectorError: If response is invalid
         """
         if response.status_code == 404:
-            raise CollectorError(f"Job board not found for {self.company_name}")
+            raise CollectorError(
+                f"Job board not found for {self.company_name}. "
+                f"URL: {getattr(self, 'api_url', 'N/A')}. "
+                f"Check if the company still uses this ATS platform."
+            )
         
         if response.status_code >= 400:
-            raise CollectorError(f"API error: {response.status_code} - {response.text}")
+            raise CollectorError(
+                f"API error for {self.company_name}: "
+                f"HTTP {response.status_code} - {response.text[:200]}"
+            )
         
         try:
             return response.json()
         except ValueError as e:
-            raise CollectorError(f"Invalid JSON response: {e}")
+            raise CollectorError(f"Invalid JSON response from {self.company_name}: {e}")
 
 
 class CollectorError(Exception):

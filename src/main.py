@@ -24,20 +24,51 @@ from src.collectors.base import Job, CollectorError
 from src.scorer import JobScorer, MatchResult, MatchStatus
 from src.sheets import SheetConfig, create_sheets_manager, MockSheetsManager
 from src.notifier import create_notifier, MockEmailNotifier
+from src.utils import safe_text, SafeLogger, print_banner
 
 # Create logs directory if it doesn't exist
 logs_dir = os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(logs_dir, exist_ok=True)
 
-# Configure logging
+
+class EmojiFilter(logging.Filter):
+    """Filter that removes emojis from log messages"""
+    EMOJI_MAP = {
+        '📊': '[INFO]', '✅': '[OK]', '❌': '[ERROR]', '⚠️': '[WARN]',
+        '⏭️': '[SKIP]', '⏱️': '[TIME]', '🔍': '[SEARCH]', '📧': '[EMAIL]',
+        '📋': '[LIST]', '📝': '[NOTE]', '⭐': '[STAR]', '🔥': '[HOT]',
+        '💼': '[JOB]', '🏢': '[COMPANY]', '📍': '[LOCATION]', '💰': '[SALARY]',
+    }
+    
+    def filter(self, record):
+        # Only convert string messages
+        if isinstance(record.msg, str):
+            record.msg = safe_text(record.msg)
+        # Don't convert args - let logging handle formatting
+        return True
+
+
+# Configure logging with emoji filter
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(os.path.join(logs_dir, 'job_intelligence.log'), mode='a')
-    ]
+    handlers=[]
 )
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.addFilter(EmojiFilter())
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logging.getLogger().addHandler(console_handler)
+
+# File handler
+file_handler = logging.FileHandler(os.path.join(logs_dir, 'job_intelligence.log'), mode='a', encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.addFilter(EmojiFilter())
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logging.getLogger().addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
 
 
@@ -139,13 +170,14 @@ class JobIntelligencePlatform:
         # Process each company
         for company in self.companies:
             ats = company.get('ats', 'other')
+            name = company.get('name', 'Unknown')
             
             # Skip companies without working collectors
             if ats not in ['greenhouse', 'lever', 'smartrecruiters']:
-                logger.info(f"⏭️  Skipping {company['name']} ({ats} - no collector)")
+                logger.info("[SKIP] Skipping %s (ATS: %s - no collector)", name, ats)
                 continue
             
-            logger.info(f"\n📊 Processing: {company['name']} ({ats})")
+            logger.info("[PROCESS] Company: %s (ATS: %s)", name, ats)
             
             try:
                 # Get collector
@@ -155,7 +187,7 @@ class JobIntelligencePlatform:
                 
                 # Fetch jobs
                 jobs = collector.fetch_jobs()
-                logger.info(f"   Found {len(jobs)} jobs")
+                logger.info("[FOUND] Jobs: %d", len(jobs))
                 
                 # Score and process each job
                 for job in jobs:
@@ -187,16 +219,18 @@ class JobIntelligencePlatform:
                     
                     # Log match
                     if match_result.status == MatchStatus.YES:
-                        logger.info(f"   ✅ YES: {job.title} ({match_result.score}/100)")
+                        logger.info("[MATCH] [YES] %s at %s (%d/100)", 
+                                  job.title, job.company, match_result.score)
                     elif match_result.status == MatchStatus.MAYBE:
-                        logger.info(f"   ⚠️ MAYBE: {job.title} ({match_result.score}/100)")
+                        logger.info("[MATCH] [MAYBE] %s at %s (%d/100)", 
+                                  job.title, job.company, match_result.score)
                 
             except CollectorError as e:
-                logger.error(f"   ❌ Error: {e}")
-                errors.append(f"{company['name']}: {e}")
+                logger.error("[ERROR] Company: %s - %s", name, str(e))
+                errors.append(f"{name}: {e}")
             except Exception as e:
-                logger.error(f"   ❌ Unexpected error: {e}")
-                errors.append(f"{company['name']}: {e}")
+                logger.error("[ERROR] Unexpected error for %s: %s", name, str(e))
+                errors.append(f"{name}: {e}")
         
         # Summary
         logger.info("\n" + "=" * 60)
@@ -206,18 +240,18 @@ class JobIntelligencePlatform:
         yes_matches = [j for j in all_jobs if j['result'].status == MatchStatus.YES]
         maybe_matches = [j for j in all_jobs if j['result'].status == MatchStatus.MAYBE]
         
-        logger.info(f"Total jobs collected: {len(all_jobs)}")
-        logger.info(f"YES matches: {len(yes_matches)}")
-        logger.info(f"MAYBE matches: {len(maybe_matches)}")
+        logger.info("Total jobs collected: %d", len(all_jobs))
+        logger.info("YES matches: %d", len(yes_matches))
+        logger.info("MAYBE matches: %d", len(maybe_matches))
         
         if errors:
-            logger.warning(f"Errors encountered: {len(errors)}")
+            logger.warning("Errors encountered: %d", len(errors))
             for error in errors:
-                logger.warning(f"  - {error}")
+                logger.warning("  - %s", error)
         
         # Store in Google Sheets
         new_jobs = self._store_jobs(all_jobs)
-        logger.info(f"\nNew jobs added to sheet: {new_jobs}")
+        logger.info("New jobs added to sheet: %d", new_jobs)
         
         # Send email notification
         high_matches = [j for j in all_jobs if j['result'].score >= 80 and j['result'].status == MatchStatus.YES]
@@ -226,11 +260,11 @@ class JobIntelligencePlatform:
             job_dicts = [j['data'] for j in high_matches]
             if job_dicts:
                 self.notifier.send_job_alert(job_dicts)
-                logger.info(f"Sent email with {len(high_matches)} high-priority matches")
+                logger.info("Sent email with %d high-priority matches", len(high_matches))
         
         # Calculate duration
         duration = (datetime.now() - start_time).total_seconds()
-        logger.info(f"\n⏱️  Completed in {duration:.1f} seconds")
+        logger.info("Completed in %.1f seconds", duration)
         logger.info("=" * 60)
         
         return {
@@ -328,18 +362,19 @@ class JobIntelligencePlatform:
         
         for company in self.companies[:3]:  # Test first 3
             ats = company.get('ats', '')
+            name = company.get('name', 'Unknown')
             if ats not in ['greenhouse', 'lever', 'smartrecruiters']:
                 continue
             
-            logger.info(f"\n📊 Testing: {company['name']}")
+            logger.info("[TEST] Company: %s (ATS: %s)", name, ats)
             
             try:
                 collector = self._get_collector(company)
                 if collector:
                     jobs = collector.fetch_jobs()
-                    logger.info(f"   ✅ Found {len(jobs)} jobs")
+                    logger.info("[OK] Found %d jobs", len(jobs))
             except Exception as e:
-                logger.error(f"   ❌ Error: {e}")
+                logger.error("[ERROR] %s: %s", name, str(e))
     
     def test_scorer(self):
         """Test the scoring engine"""
@@ -358,9 +393,63 @@ class JobIntelligencePlatform:
         
         result = self.scorer.score_job(test_job)
         
-        logger.info(f"\nTest Result: {result.status.value} ({result.score}/100)")
-        logger.info(f"Reasons: {result.reasons}")
-        logger.info(f"Matched Skills: {result.matched_skills}")
+        # Convert score to int for logging
+        score_int = int(result.score) if result.score else 0
+        
+        logger.info("Test Result: %s (%d/100)", result.status.value, score_int)
+        logger.info("Reasons: %s", result.reasons)
+        logger.info("Matched Skills: %s", result.matched_skills)
+    
+    def validate_companies(self):
+        """Validate company configurations and report issues"""
+        from src.utils import validate_company_config
+        
+        print("\n" + "=" * 80)
+        print("COMPANY CONFIGURATION VALIDATION REPORT")
+        print("=" * 80)
+        print(f"{'Company':<30} {'ATS':<15} {'Status':<12} {'Issue'}")
+        print("-" * 80)
+        
+        working = []
+        broken = []
+        manual = []
+        unverified = []
+        
+        for company in self.companies:
+            result = validate_company_config(company)
+            
+            name = result['name'][:28]
+            ats = result['ats']
+            status = result['status']
+            issue = result['issues'][0] if result['issues'] else ''
+            
+            print(f"{name:<30} {ats:<15} {status:<12} {issue}")
+            
+            if status == 'working':
+                working.append(result)
+            elif status == 'broken':
+                broken.append(result)
+            elif status == 'manual':
+                manual.append(result)
+            else:
+                unverified.append(result)
+        
+        print("-" * 80)
+        print("\nSUMMARY:")
+        print(f"  Working (auto):     {len(working)}")
+        print(f"  Broken (needs fix): {len(broken)}")
+        print(f"  Manual (no auto):  {len(manual)}")
+        print(f"  Unverified:         {len(unverified)}")
+        print(f"  Total:             {len(self.companies)}")
+        
+        if broken:
+            print("\n" + "=" * 80)
+            print("RECOMMENDATIONS FOR BROKEN CONFIGURATIONS:")
+            print("=" * 80)
+            for result in broken:
+                print(f"\n{result['name']}:")
+                for rec in result['recommendations']:
+                    print(f"  - {rec}")
 
 
 def main():
@@ -372,6 +461,7 @@ def main():
     parser.add_argument('--config', '-c', default='config', help='Config directory path')
     parser.add_argument('--test-collectors', action='store_true', help='Test collectors only')
     parser.add_argument('--test-scorer', action='store_true', help='Test scorer only')
+    parser.add_argument('--validate-companies', action='store_true', help='Validate company configurations')
     parser.add_argument('--force-email', action='store_true', help='Force email notification')
     parser.add_argument('--dry-run', action='store_true', help='Run without saving to sheets')
     
@@ -382,7 +472,9 @@ def main():
         platform = JobIntelligencePlatform(config_dir=args.config)
         
         # Run requested action
-        if args.test_collectors:
+        if args.validate_companies:
+            platform.validate_companies()
+        elif args.test_collectors:
             platform.test_collectors()
         elif args.test_scorer:
             platform.test_scorer()
@@ -400,7 +492,7 @@ def main():
             print(f"Duration: {result['duration_seconds']:.1f}s")
     
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error("Fatal error: %s", str(e))
         sys.exit(1)
 
 
