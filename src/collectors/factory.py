@@ -88,6 +88,19 @@ class CollectorFactory:
                 logger.error("Failed to create %s collector: %s", ats, str(e))
                 return None
         
+        # Fallback: Use GenericScraper for any unsupported ATS type
+        if ats != 'custom':
+            generic_class = cls._collectors.get('custom')
+            if generic_class:
+                try:
+                    return generic_class(
+                        company_name=company_name,
+                        career_url=career_url,
+                        config=config or {}
+                    )
+                except Exception as e:
+                    logger.error("Failed to create GenericScraper fallback: %s", str(e))
+        
         logger.warning("No collector registered for ATS: %s", ats)
         return None
     

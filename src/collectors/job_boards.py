@@ -137,7 +137,12 @@ class JobStreetCollector(JobBoardCollector):
         self.timeout = self.config.get('timeout', 15)
     
     def fetch_by_role(self, role: str) -> List[Job]:
-        """Fetch jobs for a specific role with fallback URLs"""
+        """Fetch jobs for a specific role with fallback URLs and timeout"""
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Request timed out")
+        
         role_slug = role.lower().replace(' ', '-')
         urls = [
             f'https://www.jobstreet.com/id/en/job-search/{role_slug}-jobs-in-indonesia/',
@@ -178,6 +183,8 @@ class JobStreetCollector(JobBoardCollector):
             {'class': lambda x: x and 'job-listing' in str(x).lower()},
             {'class': lambda x: x and 'result-item' in str(x).lower()},
             {'data-automation': True},
+            {'data-test': lambda x: x and 'job' in str(x).lower()},
+            {'class': lambda x: x and 'position' in str(x).lower()},
         ]
         
         for selector in selectors:
@@ -270,12 +277,15 @@ class GlintsCollector(JobBoardCollector):
         """Parse Glints job listings with multiple selector strategies"""
         jobs = []
         
-        # Try multiple selectors
+        # Try multiple selectors (including generic card patterns)
         selectors = [
             {'class': lambda x: x and 'job-card' in str(x).lower()},
             {'class': lambda x: x and 'open-position' in str(x).lower()},
             {'class': lambda x: x and 'job-item' in str(x).lower()},
             {'class': lambda x: x and 'card' in str(x).lower()},
+            {'class': lambda x: x and 'job' in str(x).lower()},
+            {'class': lambda x: x and 'listing' in str(x).lower()},
+            {'class': lambda x: x and 'vacancy' in str(x).lower()},
         ]
         
         for selector in selectors:

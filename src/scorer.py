@@ -60,17 +60,28 @@ class JobScorer:
     ROLE_KEYWORDS = {
         # Exact matches (highest priority)
         'exact': [
+            # Core analyst roles
             'erp analyst', 'business analyst', 'operations analyst',
             'cost control analyst', 'finance analyst', 'financial analyst',
-            'reporting analyst', 'data analyst', 'bi analyst',
+            'reporting analyst', 'data analyst', 'bi analyst', 'bi specialist',
             'process analyst', 'systems analyst', 'functional analyst',
-            'sap analyst', 'odoo analyst', 'erp consultant',
+            'sap analyst', 'odoo analyst', 'erp consultant', 'erp specialist',
             'business intelligence analyst', 'budget analyst',
+            # Extended matches (still high relevance)
+            'financial planning analyst', 'management reporting analyst',
+            'cost analyst', 'pricing analyst', 'treasury analyst',
+            'supply chain analyst', 'procurement analyst',
+            'performance analyst', 'kpi analyst', 'metrics analyst',
+            'business intelligence specialist', 'bi developer',
+            'sql analyst', 'reporting specialist', 'dashboard analyst',
         ],
         # Related matches (medium priority)
         'related': [
             'analyst', 'specialist', 'coordinator', 'administrator',
             'consultant', 'executive', 'officer', 'controller',
+            'associate', 'junior', 'senior', 'lead', 'principal',
+            'manager', 'supervisor', 'assistant',
+            'implementation', 'support', 'technical',
         ],
         # Keywords that indicate NOT relevant
         'exclude': [
@@ -128,9 +139,9 @@ class JobScorer:
         self.salary_min = user_profile.get('salary_min', 0)
         self.salary_max = user_profile.get('salary_max', 999999999)
         
-        # Scoring thresholds
-        self.yes_threshold = user_profile.get('scoring', {}).get('yes_threshold', 80)
-        self.maybe_threshold = user_profile.get('scoring', {}).get('maybe_threshold', 50)
+        # Scoring thresholds (lowered for higher recall)
+        self.yes_threshold = user_profile.get('scoring', {}).get('yes_threshold', 60)
+        self.maybe_threshold = user_profile.get('scoring', {}).get('maybe_threshold', 40)
         
         self.logger = logging.getLogger(__name__)
     
@@ -172,6 +183,7 @@ class JobScorer:
         
         # ===== 5. COMPANY MATCH (Bonus 5 points) =====
         company_score = 5  # Basic bonus for all companies
+        
         
         # ===== CALCULATE TOTAL SCORE =====
         total_score = role_score + skills_score + location_score + salary_score + company_score
