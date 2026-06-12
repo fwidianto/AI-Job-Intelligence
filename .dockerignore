@@ -1,0 +1,69 @@
+# =============================================================================
+# Docker Ignore - Files to exclude from build context
+# =============================================================================
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/*.log
+
+# Credentials and secrets
+credentials/*.json
+credentials/*.key
+*.pem
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+*.md
+!requirements.txt
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Build
+build/
+dist/
+*.whl
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak

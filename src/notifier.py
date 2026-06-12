@@ -8,8 +8,8 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBaseline
-from email import encoders
+
+
 from typing import List, Dict, Any
 from datetime import datetime
 

@@ -25,13 +25,17 @@ from src.scorer import JobScorer, MatchResult, MatchStatus
 from src.sheets import SheetConfig, create_sheets_manager, MockSheetsManager
 from src.notifier import create_notifier, MockEmailNotifier
 
+# Create logs directory if it doesn't exist
+logs_dir = os.path.join(os.path.dirname(__file__), '..', 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('logs/job_intelligence.log', mode='a')
+        logging.FileHandler(os.path.join(logs_dir, 'job_intelligence.log'), mode='a')
     ]
 )
 logger = logging.getLogger(__name__)

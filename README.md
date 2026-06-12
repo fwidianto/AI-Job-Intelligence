@@ -43,25 +43,36 @@ This platform automatically discovers job opportunities from company career page
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.11 or higher
-- Google account (for Sheets integration)
-- Gmail account (for email notifications)
+- Python 3.10, 3.11, or 3.12
+- Git (for cloning)
+- Google account (for Sheets integration - optional)
+- Gmail account (for email notifications - optional)
 
-### 1. Clone/Download the Project
-
-Download the project and extract to a folder, e.g., `C:\job-intelligence`
-
-### 2. Create Virtual Environment (Recommended)
+### 1. Clone the Repository
 
 ```bash
-cd C:\job-intelligence
-python -m venv venv
+git clone https://github.com/fwidianto/AI-Job-Intelligence.git
+cd AI-Job-Intelligence
+```
 
-# Activate on Windows
-venv\Scripts\activate
+### 2. Create Virtual Environment
 
-# Activate on macOS/Linux
+**Linux/macOS:**
+```bash
+python3 -m venv venv
 source venv/bin/activate
+```
+
+**Windows (PowerShell):**
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt):**
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
 ```
 
 ### 3. Install Dependencies
@@ -70,7 +81,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure Your Profile
+### 4. Verify Installation
+
+```bash
+# Should display help without errors
+python src/main.py --help
+
+# Should run scorer tests without errors
+python src/main.py --test-scorer
+```
+
+### 5. Configure Your Profile
 
 Edit `config/user_profile.yaml`:
 
@@ -95,7 +116,7 @@ salary_min: 15000000  # 15M IDR
 salary_max: 25000000  # 25M IDR
 ```
 
-### 5. Run the Platform
+### 6. Run the Platform
 
 ```bash
 # Test mode (no external API calls)
@@ -103,7 +124,76 @@ python src/main.py --test-scorer
 
 # Full run
 python src/main.py
+
+# Test collectors
+python src/main.py --test-collectors
 ```
+
+---
+
+## 🐳 Docker Quick Start
+
+### Build and Run
+
+```bash
+# Build image
+docker build -t job-intelligence .
+
+# Run with test
+docker run --rm job-intelligence python src/main.py --test-scorer
+
+# Interactive shell
+docker run --rm -it job-intelligence /bin/bash
+```
+
+### Environment Variables
+
+```bash
+# Run with environment file
+docker run --rm --env-file .env job-intelligence python src/main.py
+
+# Or inline
+docker run --rm \
+  -e GOOGLE_SHEETS_ID=your-id \
+  -e GOOGLE_CREDENTIALS=/app/credentials/service-account.json \
+  job-intelligence python src/main.py
+```
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables (Optional)
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GOOGLE_SHEETS_ID` | Your spreadsheet ID | No (uses mock) |
+| `GOOGLE_CREDENTIALS` | Path to service account JSON | No (uses mock) |
+| `EMAIL_SMTP_USER` | Gmail for notifications | No |
+| `EMAIL_SMTP_PASSWORD` | Gmail App Password | No |
+| `LOG_LEVEL` | Log level (INFO, DEBUG, etc.) | No |
+
+### Profile Configuration
+
+Edit `config/user_profile.yaml`:
+- Target roles (job titles you're looking for)
+- Your skills
+- Preferred locations
+- Salary range
+- Email settings
+
+### Companies Configuration
+
+Edit `config/companies.yaml`:
+- Add/remove target companies
+- Set ATS platform for each company
+- Adjust priorities
 
 ## 📝 Configuration
 
