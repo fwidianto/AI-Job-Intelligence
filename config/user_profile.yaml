@@ -1,0 +1,82 @@
+# ===========================================
+# User Profile Configuration
+# ===========================================
+# Edit this file to customize your job search preferences
+
+# Target job roles (case-insensitive matching)
+target_roles:
+  - ERP Analyst
+  - Business Analyst
+  - Operations Analyst
+  - Cost Control Analyst
+  - Finance Analyst
+  - Reporting Analyst
+  - Data Analyst
+  - BI Analyst
+  - Financial Analyst
+  - Process Analyst
+
+# Your key skills (used for matching)
+skills:
+  # ERP Systems
+  - SAP ECC
+  - SAP S/4HANA
+  - Odoo ERP
+  - SAP Module
+  
+  # Business Intelligence
+  - SQL
+  - Business Intelligence
+  - Looker Studio
+  - Power BI
+  - Tableau
+  - Data Analysis
+  
+  # Finance & Operations
+  - Budgeting
+  - Forecasting
+  - Cost Control
+  - Financial Reporting
+  - Process Improvement
+  
+  # Tools & Software
+  - Google Sheets
+  - Excel
+  - ERP Implementation
+  - Dashboard
+  - Reporting
+
+# Preferred locations (exact match or partial)
+locations:
+  - Jakarta
+  - Bekasi
+  - Karawang
+  - Bandung
+  - Surabaya
+  - Remote
+  - Work from Home
+
+# Salary range (IDR monthly)
+salary_min: 15000000  # 15 million IDR
+salary_max: 25000000  # 25 million IDR
+
+# Email configuration for notifications
+email:
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  smtp_user: your-email@gmail.com
+  smtp_password: your-app-password
+  from_addr: your-email@gmail.com
+  to_addr:
+    - your-email@gmail.com
+  enabled: true  # Set to false to disable email notifications
+
+# Scoring thresholds
+scoring:
+  yes_threshold: 80   # Score >= 80 = YES (apply immediately)
+  maybe_threshold: 50  # Score >= 50 = MAYBE (review and decide)
+
+# Logging
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  file: logs/job_intelligence.log
