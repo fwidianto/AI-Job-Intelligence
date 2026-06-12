@@ -113,97 +113,135 @@ class JobStreetCollector(JobBoardCollector):
     
     ATS_NAME = "JobStreet"
     
-    # Search URLs for target roles
+    # Search URLs for target roles (multiple fallbacks)
     SEARCH_TEMPLATES = {
-        'business_analyst': 'https://www.jobstreet.com/id/en/job-search/business-analyst-jobs-in-indonesia/',
-        'erp_analyst': 'https://www.jobstreet.com/id/en/job-search/erp-analyst-jobs-in-indonesia/',
-        'data_analyst': 'https://www.jobstreet.com/id/en/job-search/data-analyst-jobs-in-indonesia/',
-        'operations_analyst': 'https://www.jobstreet.com/id/en/job-search/operations-analyst-jobs-in-indonesia/',
+        'business_analyst': [
+            'https://www.jobstreet.com/id/en/job-search/business-analyst-jobs-in-indonesia/',
+            'https://www.jobstreet.co.id/id/en/job-search/business-analyst-jobs/',
+        ],
+        'erp_analyst': [
+            'https://www.jobstreet.com/id/en/job-search/erp-analyst-jobs-in-indonesia/',
+        ],
+        'data_analyst': [
+            'https://www.jobstreet.com/id/en/job-search/data-analyst-jobs-in-indonesia/',
+        ],
+        'operations_analyst': [
+            'https://www.jobstreet.com/id/en/job-search/operations-analyst-jobs-in-indonesia/',
+        ],
     }
     
     def __init__(self, company_name: str = "JobStreet", config: Optional[Dict] = None):
-        # Use default search for business analyst jobs
-        search_url = self.SEARCH_TEMPLATES['business_analyst']
+        search_url = self.SEARCH_TEMPLATES['business_analyst'][0]
         super().__init__(company_name, "JobStreet", search_url, config)
+        self.config = config or {}
+        self.timeout = self.config.get('timeout', 15)
     
     def fetch_by_role(self, role: str) -> List[Job]:
-        """Fetch jobs for a specific role"""
+        """Fetch jobs for a specific role with fallback URLs"""
         role_slug = role.lower().replace(' ', '-')
-        url = f'https://www.jobstreet.com/id/en/job-search/{role_slug}-jobs-in-indonesia/'
+        urls = [
+            f'https://www.jobstreet.com/id/en/job-search/{role_slug}-jobs-in-indonesia/',
+            f'https://www.jobstreet.co.id/id/en/job-search/{role_slug}-jobs/',
+        ]
         
-        try:
-            import requests
-            from bs4 import BeautifulSoup
-            
-            resp = requests.get(url, timeout=30, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            
-            if resp.status_code != 200:
-                return []
-            
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            return self._parse_job_listings(soup, url)
-            
-        except Exception as e:
-            self.logger.error("Failed to fetch %s jobs: %s", role, str(e))
-            return []
+        for url in urls:
+            try:
+                import requests
+                from bs4 import BeautifulSoup
+                
+                resp = requests.get(url, timeout=self.timeout, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
+                })
+                
+                if resp.status_code == 200 and len(resp.text) > 10000:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    jobs = self._parse_job_listings(soup, url)
+                    if jobs:
+                        self.logger.info("Found %d jobs from %s", len(jobs), url)
+                        return jobs
+                        
+            except Exception as e:
+                self.logger.debug("Failed to fetch %s from %s: %s", role, url, str(e))
+                continue
+        
+        self.logger.warning("No jobs found for role: %s", role)
+        return []
     
     def _parse_job_listings(self, soup: BeautifulSoup, base_url: str) -> List[Job]:
-        """Parse JobStreet job listings"""
+        """Parse JobStreet job listings with multiple selector strategies"""
         jobs = []
         
-        # JobStreet uses data-search attributes
-        for job_card in soup.find_all(['div', 'article'], attrs={'data-search-id': True}):
-            try:
-                # Extract job title
-                title_elem = job_card.find('a', attrs={'data-automation': 'jobTitle'})
-                if not title_elem:
-                    title_elem = job_card.find('h1') or job_card.find('h2') or job_card.find('h3')
-                
-                if not title_elem:
+        # Strategy 1: Look for job cards with common class patterns
+        selectors = [
+            {'class': lambda x: x and 'job-card' in str(x).lower()},
+            {'class': lambda x: x and 'job-listing' in str(x).lower()},
+            {'class': lambda x: x and 'result-item' in str(x).lower()},
+            {'data-automation': True},
+        ]
+        
+        for selector in selectors:
+            job_cards = soup.find_all(['div', 'article', 'li'], attrs=selector)
+            
+            for job_card in job_cards:
+                try:
+                    # Extract job title - try multiple selectors
+                    title_elem = (
+                        job_card.find('a', attrs={'data-automation': 'jobTitle'}) or
+                        job_card.find('a', class_=lambda x: x and 'title' in str(x).lower()) or
+                        job_card.find('h2') or
+                        job_card.find('h3') or
+                        job_card.find('a')
+                    )
+                    
+                    if not title_elem:
+                        continue
+                    
+                    title = title_elem.get_text(strip=True)
+                    if not title or len(title) < 3 or len(title) > 200:
+                        continue
+                    
+                    # Extract URL
+                    url = title_elem.get('href', '') or title_elem.get('data-job-url', '')
+                    if url and not url.startswith('http'):
+                        url = 'https://www.jobstreet.com' + url
+                    
+                    # Extract company
+                    company_elem = (
+                        job_card.find('a', attrs={'data-automation': 'jobCompany'}) or
+                        job_card.find('span', class_=lambda x: x and 'company' in str(x).lower())
+                    )
+                    company = company_elem.get_text(strip=True) if company_elem else self.board_name
+                    
+                    # Extract location
+                    location_elem = (
+                        job_card.find('span', attrs={'data-automation': 'jobLocation'}) or
+                        job_card.find('span', class_=lambda x: x and 'location' in str(x).lower())
+                    )
+                    location = location_elem.get_text(strip=True) if location_elem else 'Indonesia'
+                    
+                    # Create job
+                    job_id = f"js_{hash(url)}" if url else f"js_{hash(title)}"
+                    
+                    job = Job(
+                        job_id=job_id,
+                        title=title,
+                        company=company,
+                        location=location,
+                        url=url,
+                        source=self.ATS_NAME,
+                        description='',
+                        skills=[]
+                    )
+                    
+                    jobs.append(job)
+                    
+                except Exception as e:
+                    self.logger.debug("Failed to parse job card: %s", str(e))
                     continue
-                
-                title = title_elem.get_text(strip=True)
-                if not title or len(title) < 3:
-                    continue
-                
-                # Extract URL
-                url = title_elem.get('href', '')
-                if url and not url.startswith('http'):
-                    url = 'https://www.jobstreet.com' + url
-                
-                # Extract company
-                company_elem = job_card.find('a', attrs={'data-automation': 'jobCompany'})
-                company = company_elem.get_text(strip=True) if company_elem else 'Not specified'
-                
-                # Extract location
-                location_elem = job_card.find('span', attrs={'data-automation': 'jobLocation'})
-                location = location_elem.get_text(strip=True) if location_elem else 'Indonesia'
-                
-                # Extract posted date
-                date_elem = job_card.find(['span', 'div'], attrs={'data-automation': 'jobDate'})
-                posted_date = None
-                
-                # Create job
-                job_id = f"js_{hash(url)}" if url else f"js_{hash(title)}"
-                
-                job = Job(
-                    job_id=job_id,
-                    title=title,
-                    company=company,
-                    location=location,
-                    url=url,
-                    source=self.ATS_NAME,
-                    description='',
-                    skills=[]
-                )
-                
-                jobs.append(job)
-                
-            except Exception as e:
-                self.logger.debug("Failed to parse job card: %s", str(e))
-                continue
+            
+            if jobs:
+                break
         
         return jobs
 
@@ -225,51 +263,74 @@ class GlintsCollector(JobBoardCollector):
     
     def __init__(self, company_name: str = "Glints", config: Optional[Dict] = None):
         super().__init__(company_name, "Glints", self.SEARCH_URLS['analyst'], config)
+        self.config = config or {}
+        self.timeout = self.config.get('timeout', 15)
     
     def _parse_job_listings(self, soup: BeautifulSoup, base_url: str) -> List[Job]:
-        """Parse Glints job listings"""
+        """Parse Glints job listings with multiple selector strategies"""
         jobs = []
         
-        # Glints uses job-card class
-        for job_card in soup.find_all('div', class_=lambda x: x and 'job-card' in x.split()):
-            try:
-                title_elem = job_card.find('a') or job_card.find('h3')
-                
-                if not title_elem:
+        # Try multiple selectors
+        selectors = [
+            {'class': lambda x: x and 'job-card' in str(x).lower()},
+            {'class': lambda x: x and 'open-position' in str(x).lower()},
+            {'class': lambda x: x and 'job-item' in str(x).lower()},
+            {'class': lambda x: x and 'card' in str(x).lower()},
+        ]
+        
+        for selector in selectors:
+            job_cards = soup.find_all(['div', 'article', 'li'], attrs=selector)
+            
+            for job_card in job_cards:
+                try:
+                    title_elem = (
+                        job_card.find('a') or
+                        job_card.find('h3') or
+                        job_card.find('h4') or
+                        job_card.find('span')
+                    )
+                    
+                    if not title_elem:
+                        continue
+                    
+                    title = title_elem.get_text(strip=True)
+                    if not title or len(title) < 3 or len(title) > 200:
+                        continue
+                    
+                    url = title_elem.get('href', '')
+                    if url and not url.startswith('http'):
+                        url = 'https://glints.com' + url
+                    
+                    # Company
+                    company_elem = (
+                        job_card.find('span', class_=lambda x: x and 'company' in str(x).lower()) or
+                        job_card.find('a', class_=lambda x: x and 'company' in str(x).lower())
+                    )
+                    company = company_elem.get_text(strip=True) if company_elem else self.board_name
+                    
+                    # Location
+                    location_elem = job_card.find('span', class_=lambda x: x and 'location' in str(x).lower())
+                    location = location_elem.get_text(strip=True) if location_elem else 'Indonesia'
+                    
+                    job = Job(
+                        job_id=f"gl_{hash(url)}" if url else f"gl_{hash(title)}",
+                        title=title,
+                        company=company,
+                        location=location,
+                        url=url,
+                        source=self.ATS_NAME,
+                        description='',
+                        skills=[]
+                    )
+                    
+                    jobs.append(job)
+                    
+                except Exception as e:
+                    self.logger.debug("Failed to parse Glints job: %s", str(e))
                     continue
-                
-                title = title_elem.get_text(strip=True)
-                if not title:
-                    continue
-                
-                url = title_elem.get('href', '')
-                if url and not url.startswith('http'):
-                    url = 'https://glints.com' + url
-                
-                # Company
-                company_elem = job_card.find('span', class_=lambda x: x and 'company' in str(x).lower())
-                company = company_elem.get_text(strip=True) if company_elem else 'Not specified'
-                
-                # Location
-                location_elem = job_card.find('span', class_=lambda x: x and 'location' in str(x).lower())
-                location = location_elem.get_text(strip=True) if location_elem else 'Indonesia'
-                
-                job = Job(
-                    job_id=f"gl_{hash(url)}" if url else f"gl_{hash(title)}",
-                    title=title,
-                    company=company,
-                    location=location,
-                    url=url,
-                    source=self.ATS_NAME,
-                    description='',
-                    skills=[]
-                )
-                
-                jobs.append(job)
-                
-            except Exception as e:
-                self.logger.debug("Failed to parse Glints job: %s", str(e))
-                continue
+            
+            if jobs:
+                break
         
         return jobs
 

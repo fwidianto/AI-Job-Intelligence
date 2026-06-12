@@ -30,18 +30,18 @@ class SmartRecruitersCollector(BaseCollector):
     ATS_NAME = "SmartRecruiters"
     API_BASE_URL = "https://www.smartrecruiters.com/api/public/postings"
     
-    def __init__(self, company_name: str, company_id: str = None, config: Optional[Dict] = None):
+    def __init__(self, company_name: str, company_slug: str = None, config: Optional[Dict] = None):
         """
         Initialize SmartRecruiters collector.
         
         Args:
             company_name: Full company name
-            company_id: SmartRecruiters company ID (or slug)
+            company_slug: SmartRecruiters company ID (or slug)
             config: Optional configuration
         """
-        super().__init__(company_name, company_id or company_name.lower().replace(' ', '-'), config)
+        super().__init__(company_name, company_slug or company_name.lower().replace(' ', '-'), config)
         # SmartRecruiters uses company ID for API
-        self.company_id = company_id or self._slugify(company_name)
+        self.company_id = company_slug or self._slugify(company_name)
         self.api_url = f"{self.API_BASE_URL}"
         self.logger = logging.getLogger(f"{__name__}.SmartRecruiters.{self.company_id}")
     

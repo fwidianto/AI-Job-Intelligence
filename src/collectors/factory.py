@@ -70,11 +70,20 @@ class CollectorFactory:
         
         if collector_class:
             try:
-                return collector_class(
-                    company_name=company_name,
-                    company_slug=slug,
-                    config=config or {}
-                )
+                # Handle different collector signatures
+                if ats == 'custom':
+                    # GenericScraper needs career_url
+                    return collector_class(
+                        company_name=company_name,
+                        career_url=career_url,
+                        config=config or {}
+                    )
+                else:
+                    return collector_class(
+                        company_name=company_name,
+                        company_slug=slug,
+                        config=config or {}
+                    )
             except Exception as e:
                 logger.error("Failed to create %s collector: %s", ats, str(e))
                 return None
