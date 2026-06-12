@@ -21,6 +21,9 @@ from .ats_extractor import WorkdayExtractor, SuccessFactorsExtractor
 from .source_resolver import JobSourceResolver, JobSource as SourceJobSource, ResolverResult, resolve_job_sources
 from .search_discovery import SearchJobDiscovery, SearchResult, search_jobs, search_company_jobs
 from .engine import JobIntelligenceEngine, ProfileConfig, PipelineResult, run_job_intelligence
+from .network_intercept import NetworkInterceptor, InterceptResult, CapturedAPI, intercept_job_apis
+from .company_discovery import CompanyURLDiscovery, DiscoveredSource, DiscoveryResult, discover_company_sources
+from .icims_collector import ICimsCollector, fetch_icims_jobs
 
 # Job boards
 from .job_boards import JobStreetCollector, GlintsCollector
@@ -42,6 +45,7 @@ __all__ = [
     'GreenhouseCollector',
     'LeverCollector',
     'SmartRecruitersCollector',
+    'ICimsCollector',
     
     # Fallback Collectors
     'GenericScraper',
@@ -72,6 +76,18 @@ __all__ = [
     'ProfileConfig',
     'PipelineResult',
     'run_job_intelligence',
+    
+    # Network Intercept (v2)
+    'NetworkInterceptor',
+    'InterceptResult',
+    'CapturedAPI',
+    'intercept_job_apis',
+    
+    # Company Discovery (v2)
+    'CompanyURLDiscovery',
+    'DiscoveredSource',
+    'DiscoveryResult',
+    'discover_company_sources',
     
     # Job Boards
     'JobStreetCollector',

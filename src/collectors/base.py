@@ -42,6 +42,12 @@ class Job:
     requirements: List[str] = field(default_factory=list)
     raw_data: Dict[str, Any] = field(default_factory=dict)  # Original data from API
     
+    # ATS/Data Quality fields (v2)
+    apply_url: str = ""  # REQUIRED - Must be valid endpoint
+    source_confidence: float = 0.5  # 0.0-1.0 (API=0.95, HTML=0.5, Scraped=0.3)
+    extraction_method: str = ""  # 'api', 'network_intercept', 'html', 'scraped'
+    validated_source: bool = False  # True if source was validated
+    
     # Matching results (populated by scoring engine)
     match_score: int = 0  # 0-100
     match_status: str = "NO"  # YES, MAYBE, NO
@@ -49,7 +55,16 @@ class Job:
     matched_skills: List[str] = field(default_factory=list)
     
     def __str__(self) -> str:
-        return f"Job({self.job_id}): {self.title} at {self.company} [{self.match_status}:{self.match_score}]"
+        return f"Job({self.job_id}): {self.title} at {self.company} [{self.match_status}:{self.match_score}] [{self.extraction_method}]"
+    
+    def is_valid(self) -> bool:
+        """Validate job has required fields"""
+        return bool(
+            self.title and 
+            self.company and 
+            self.apply_url and  # apply_url is REQUIRED
+            self.apply_url.startswith('http')
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert job to dictionary for storage"""
@@ -59,8 +74,12 @@ class Job:
             'company': self.company,
             'location': self.location,
             'url': self.url,
+            'apply_url': self.apply_url,
             'source': self.source,
-            'description': self.description[:500] if self.description else "",  # Truncate
+            'source_confidence': self.source_confidence,
+            'extraction_method': self.extraction_method,
+            'validated_source': self.validated_source,
+            'description': self.description[:500] if self.description else "",
             'salary_min': self.salary_min,
             'salary_max': self.salary_max,
             'employment_type': self.employment_type,
