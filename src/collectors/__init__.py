@@ -1,35 +1,34 @@
-"""Job Intelligence Platform - Collectors Module
+"""Job Intelligence Platform - ATS-Only Collectors Module
 
-This module contains collectors for various ATS and job board platforms:
-- Greenhouse, Lever, SmartRecruiters (API-based)
-- Workday, SuccessFactors (enterprise ATS)
-- GenericScraper (custom/unknown ATS)
-- DynamicScraper (Playwright for JavaScript-rendered pages)
-- JobStreet, Glints (job boards)
+⚠️ STRICT RULE: This module ONLY contains ATS-specific collectors.
+NO HTML scraping, GenericScraper, or job board scrapers.
+
+Supported ATS:
+- Greenhouse (API)
+- Lever (API)
+- SmartRecruiters (API)
+- iCIMS (API)
+- Workday (OData)
+- SuccessFactors (OData)
 """
 
 from .base import BaseCollector, Job, CollectorError
 from .factory import CollectorFactory, register_collector
+
+# ATS Collectors ONLY
 from .greenhouse import GreenhouseCollector
 from .lever import LeverCollector
 from .smartrecruiters import SmartRecruitersCollector
-from .generic_scraper import GenericScraper, scrape_career_page
-
-# New dynamic scraping modules
-from .dynamic_scraper import DynamicScraper, ScrapeResult
-from .ats_extractor import WorkdayExtractor, SuccessFactorsExtractor
-from .source_resolver import JobSourceResolver, JobSource as SourceJobSource, ResolverResult, resolve_job_sources
-from .search_discovery import SearchJobDiscovery, SearchResult, search_jobs, search_company_jobs
-from .engine import JobIntelligenceEngine, ProfileConfig, PipelineResult, run_job_intelligence
-from .network_intercept import NetworkInterceptor, InterceptResult, CapturedAPI, intercept_job_apis
-from .company_discovery import CompanyURLDiscovery, DiscoveredSource, DiscoveryResult, discover_company_sources
 from .icims_collector import ICimsCollector, fetch_icims_jobs
 
-# Job boards
-from .job_boards import JobStreetCollector, GlintsCollector
+# ATS Extractors (Workday, SuccessFactors)
+from .ats_extractor import WorkdayExtractor, SuccessFactorsExtractor
 
-# Register generic scraper as 'custom' collector
-CollectorFactory.register('custom', GenericScraper)
+# Source Validation
+from .source_resolver import JobSourceResolver, ResolverResult
+
+# Engine (optional orchestration)
+from .engine import JobIntelligenceEngine, ProfileConfig, PipelineResult
 
 __all__ = [
     # Base
@@ -37,59 +36,27 @@ __all__ = [
     'Job',
     'CollectorError',
     
-    # Factory
+    # Factory (ATS-ONLY)
     'CollectorFactory',
     'register_collector',
     
-    # API-based Collectors
+    # ATS Collectors
     'GreenhouseCollector',
     'LeverCollector',
     'SmartRecruitersCollector',
     'ICimsCollector',
-    
-    # Fallback Collectors
-    'GenericScraper',
-    'scrape_career_page',
-    
-    # Dynamic Scraping
-    'DynamicScraper',
-    'ScrapeResult',
+    'fetch_icims_jobs',
     
     # ATS Extractors
     'WorkdayExtractor',
     'SuccessFactorsExtractor',
     
-    # Job Source Resolution
+    # Source Validation
     'JobSourceResolver',
-    'SourceJobSource',
     'ResolverResult',
-    'resolve_job_sources',
     
-    # Search-Based Discovery
-    'SearchJobDiscovery',
-    'SearchResult',
-    'search_jobs',
-    'search_company_jobs',
-    
-    # Job Intelligence Engine
+    # Engine
     'JobIntelligenceEngine',
     'ProfileConfig',
     'PipelineResult',
-    'run_job_intelligence',
-    
-    # Network Intercept (v2)
-    'NetworkInterceptor',
-    'InterceptResult',
-    'CapturedAPI',
-    'intercept_job_apis',
-    
-    # Company Discovery (v2)
-    'CompanyURLDiscovery',
-    'DiscoveredSource',
-    'DiscoveryResult',
-    'discover_company_sources',
-    
-    # Job Boards
-    'JobStreetCollector',
-    'GlintsCollector',
 ]

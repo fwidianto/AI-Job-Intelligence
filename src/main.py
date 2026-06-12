@@ -20,18 +20,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.collectors import (
     CollectorFactory,
-    GenericScraper,
     Job,
     CollectorError,
     GreenhouseCollector,
     LeverCollector,
     SmartRecruitersCollector,
+    ICimsCollector,
+    WorkdayExtractor,
+    SuccessFactorsExtractor,
     JobSourceResolver,
-    SearchJobDiscovery,
     JobIntelligenceEngine,
     ProfileConfig,
 )
-from src.collectors.job_boards import collect_from_all_boards, JobStreetCollector, GlintsCollector, KalibrrCollector
 from src.scorer import JobScorer, MatchResult, MatchStatus
 from src.sheets import SheetConfig, create_sheets_manager, MockSheetsManager
 from src.notifier import create_notifier, MockEmailNotifier

@@ -1,35 +1,28 @@
 """
-Job Intelligence Engine - Main Orchestrator
+Job Intelligence Engine - ATS-Only Orchestrator
 
-This module provides the central orchestration for the job intelligence system.
-
-Architecture:
-1. API-FIRST: Use Greenhouse, Lever, SmartRecruiters APIs
-2. SEARCH-BASED: Use DuckDuckGo/Google search for discovery
-3. SCRAPING-LAST-RESORT: Only for stable job listing pages
+⚠️ STRICT RULE: This engine ONLY uses ATS-specific collectors.
+NO HTML scraping, NO fallback to generic extraction.
 
 Pipeline:
 1. Load user profile
-2. Discover jobs from multiple sources
-3. Normalize and deduplicate
-4. Score against profile
-5. Deliver matches
+2. Route companies to ATS collectors (greenhouse, lever, workday, etc.)
+3. Collect jobs from ATS APIs
+4. Normalize and deduplicate
+5. Score against profile
+6. Deliver matches
+
+Unsupported ATS → SKIP (no scraping)
 """
 
 import logging
 import time
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .base import Job
 from .factory import CollectorFactory
 from .source_resolver import JobSourceResolver
-from .search_discovery import SearchJobDiscovery, search_jobs, search_company_jobs
-from .greenhouse import GreenhouseCollector
-from .lever import LeverCollector
-from .smartrecruiters import SmartRecruitersCollector
 
 logger = logging.getLogger(__name__)
 

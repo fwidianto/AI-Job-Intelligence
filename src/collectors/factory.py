@@ -1,221 +1,184 @@
 """
-Collector Factory - Automatically creates the correct collector for any career URL
+Collector Factory - ATS-Only Job Collection System
 
-The factory implements an intelligent fallback pipeline:
-1. Try ATS-specific extractor (Workday, SuccessFactors, Greenhouse, Lever, SmartRecruiters)
-2. Fallback to GenericScraper for other ATS types
-3. Fallback to DynamicScraper (Playwright) for JavaScript-rendered pages
-4. Search-based fallback for completely unknown sites
+⚠️ STRICT RULE: This factory ONLY creates ATS-specific collectors.
+NO fallback to HTML scraping, GenericScraper, or any non-ATS method.
 
-No manual ATS assignment required.
+Supported ATS types:
+- greenhouse: GreenhouseCollector
+- lever: LeverCollector
+- workday: WorkdayCollector (ONLY if structured endpoint confirmed)
+- smartrecruiters: SmartRecruitersCollector
+- icims: ICimsCollector
+
+If a source is NOT one of the above → return None (skip company)
 """
 
 import logging
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, Any
 
 from ..detectors.ats_detector import ATSDetector, detect_ats
-
-if TYPE_CHECKING:
-    from .base import BaseCollector, Job
-    from .dynamic_scraper import DynamicScraper
 
 logger = logging.getLogger(__name__)
 
 
 class CollectorFactory:
     """
-    Factory for creating job collectors based on auto-detected ATS.
+    ATS-Only Factory for creating job collectors.
     
-    Usage:
-        collector = CollectorFactory.create(career_url='https://unilever.com/careers')
-        jobs = collector.fetch_jobs()
+    ⚠️ STRICT MODE: NO FALLBACK SCRAPING
     
     Pipeline:
-        1. ATS-specific extractor (Workday, SuccessFactors, Greenhouse, Lever, SmartRecruiters)
-        2. GenericScraper for custom/unknown ATS
-        3. DynamicScraper (Playwright) for JavaScript-rendered pages
+        1. Receive company name + career URL
+        2. Detect ATS type (greenhouse, lever, workday, smartrecruiters, icims)
+        3. Route to appropriate collector
+        4. If unknown → SKIP (do NOT scrape)
+    
+    Usage:
+        collector = CollectorFactory.create(
+            company_name='Grab',
+            career_url='https://grab.careers'
+        )
+        if collector:
+            jobs = collector.fetch_jobs()
+        else:
+            # SKIP company - no ATS match
+            pass
     """
+    
+    # ATS-ONLY supported types
+    SUPPORTED_ATS = {
+        'greenhouse',
+        'lever', 
+        'workday',
+        'smartrecruiters',
+        'icims'
+    }
     
     # Registry of collector classes by ATS type
     _collectors = {}
     
-    # ATS types that have specialized extractors
-    _ATS_EXTRACTORS = {
-        'workday': 'ats_extractor.WorkdayExtractor',
-        'successfactors': 'ats_extractor.SuccessFactorsExtractor',
-    }
-    
     @classmethod
     def register(cls, ats_name: str, collector_class):
         """Register a collector class for an ATS type"""
-        cls._collectors[ats_name] = collector_class
-        logger.debug("Registered collector: %s -> %s", ats_name, collector_class.__name__)
+        if ats_name in cls.SUPPORTED_ATS:
+            cls._collectors[ats_name] = collector_class
+            logger.debug("Registered ATS collector: %s -> %s", ats_name, collector_class.__name__)
+        else:
+            logger.warning("Cannot register non-ATS collector: %s", ats_name)
     
     @classmethod
-    def create(cls, career_url: str, company_name: str = None, config: Dict = None) -> Optional[Any]:
+    def create(cls, company_name: str, career_url: str, config: Dict = None) -> Optional[Any]:
         """
-        Create a collector for the given career URL.
+        Create a collector for the given company and career URL.
+        
+        ⚠️ STRICT RULE: Returns None if ATS is not in SUPPORTED_ATS list.
+        DO NOT fall back to scraping.
         
         Args:
-            career_url: URL of the company career page
-            company_name: Optional company name (extracted from URL if not provided)
+            company_name: Company name
+            career_url: Career page URL
             config: Optional configuration dict
             
         Returns:
-            Collector instance with intelligent fallback
+            Collector instance OR None (if unsupported ATS)
         """
         if not career_url:
-            logger.warning("No career URL provided to factory")
+            logger.warning("CollectorFactory: No career URL provided")
             return None
         
-        # Auto-detect ATS
+        # Detect ATS type
         detector = ATSDetector()
         detection = detector.detect(career_url)
         
-        ats = detection['ats']
-        slug = detection['company_slug'] or company_name or cls._extract_company_from_url(career_url)
+        ats = detection.get('ats', 'unknown')
         
-        logger.info("Factory: Creating collector for %s (ATS: %s)", slug, ats)
+        # STRICT: Only accept known ATS types
+        if ats not in cls.SUPPORTED_ATS:
+            logger.warning(
+                "CollectorFactory: SKIPPING %s (ATS: %s) - Not in supported list %s",
+                company_name, ats, cls.SUPPORTED_ATS
+            )
+            return None
         
-        # Get company name if not provided
-        if not company_name:
-            company_name = slug.replace('-', ' ').title() if slug else 'Unknown'
+        logger.info("CollectorFactory: Creating %s collector for %s", ats, company_name)
         
-        # Build config with all necessary info
+        # Get collector class
+        collector_class = cls._collectors.get(ats)
+        
+        if not collector_class:
+            logger.error("CollectorFactory: No collector registered for %s", ats)
+            return None
+        
+        # Build config
+        slug = detection.get('company_slug') or company_name.lower().replace(' ', '-')
         full_config = config or {}
         full_config['ats_type'] = ats
         full_config['company_slug'] = slug
         full_config['api_url'] = detection.get('api_url')
         
-        # Try ATS-specific collector first
-        collector_class = cls._collectors.get(ats)
-        
-        if collector_class:
-            try:
-                if ats == 'custom':
-                    return collector_class(
-                        company_name=company_name,
-                        career_url=career_url,
-                        config=full_config
-                    )
-                else:
-                    return collector_class(
-                        company_name=company_name,
-                        company_slug=slug,
-                        config=full_config
-                    )
-            except Exception as e:
-                logger.error("Failed to create %s collector: %s", ats, str(e))
-        
-        # Fallback: Use GenericScraper for any unsupported ATS type
-        if ats != 'custom':
-            generic_class = cls._collectors.get('custom')
-            if generic_class:
-                try:
-                    return generic_class(
-                        company_name=company_name,
-                        career_url=career_url,
-                        config=full_config
-                    )
-                except Exception as e:
-                    logger.error("Failed to create GenericScraper fallback: %s", str(e))
-        
-        logger.warning("No collector registered for ATS: %s", ats)
-        return None
-    
-    @classmethod
-    def create_with_fallback(cls, career_url: str, company_name: str = None, 
-                            config: Dict = None) -> Optional[Any]:
-        """
-        Create a collector with full fallback chain including DynamicScraper.
-        
-        This method ensures at least a DynamicScraper is returned even if
-        ATS detection fails or static scraping doesn't work.
-        """
-        from .dynamic_scraper import DynamicScraper
-        
-        # Try standard creation first
-        collector = cls.create(career_url, company_name, config)
-        
-        if collector is not None:
-            return collector
-        
-        # Final fallback: DynamicScraper for JavaScript-rendered pages
-        logger.info("Using DynamicScraper fallback for: %s", career_url)
-        
-        if company_name is None:
-            from urllib.parse import urlparse
-            company_name = urlparse(career_url).netloc.split('.')[0]
-        
-        # Return a wrapped DynamicScraper as a collector
-        return DynamicScraperCollector(career_url, company_name, config or {})
+        try:
+            return collector_class(
+                company_name=company_name,
+                company_slug=slug,
+                config=full_config
+            )
+        except Exception as e:
+            logger.error("CollectorFactory: Failed to create %s collector for %s: %s",
+                        ats, company_name, str(e))
+            return None
     
     @classmethod
     def create_for_company(cls, company_config: Dict) -> Optional[Any]:
         """
-        Create a collector from company configuration dict.
+        Create a collector from company configuration.
+        
+        ⚠️ STRICT: Returns None if ATS not in SUPPORTED_ATS list.
         
         Args:
             company_config: Dict with 'name', 'career_url', 'ats' (optional)
             
         Returns:
-            Collector instance or None
+            Collector instance OR None
         """
         name = company_config.get('name', 'Unknown')
         url = company_config.get('career_url', '')
-        
-        # Use JobSourceResolver for smart source detection (modern companies)
-        use_resolver = company_config.get('use_resolver', True)
-        
-        if use_resolver:
-            from .source_resolver import JobSourceResolver
-            resolver = JobSourceResolver()
-            result = resolver.resolve(url, name)
-            
-            if result.success and result.jobs:
-                logger.info(f"Source resolver found {len(result.jobs)} jobs for {name}")
-                return ResolvedCollector(result.jobs, name, result.method_used)
-        
-        # Fall back to standard creation
         ats = company_config.get('ats')
         
-        if ats and ats not in ['other', 'manual']:
-            # Try to use configured ATS
+        # If ATS is explicitly configured, validate it
+        if ats:
+            if ats not in cls.SUPPORTED_ATS:
+                logger.warning(
+                    "CollectorFactory: SKIPPING %s - ATS '%s' not supported",
+                    name, ats
+                )
+                return None
+            
             collector_class = cls._collectors.get(ats)
             if collector_class:
-                slug = company_config.get('slug', cls._extract_company_from_url(url))
-                return collector_class(
-                    company_name=name,
-                    company_slug=slug,
-                    config=company_config
-                )
+                slug = company_config.get('slug', name.lower().replace(' ', '-'))
+                try:
+                    return collector_class(
+                        company_name=name,
+                        company_slug=slug,
+                        config=company_config
+                    )
+                except Exception as e:
+                    logger.error("CollectorFactory: Failed to create %s collector: %s", ats, str(e))
+                    return None
         
-        # Fall back to auto-detection
-        return cls.create(career_url=url, company_name=name, config=company_config)
+        # If no ATS configured, try auto-detection
+        return cls.create(company_name=name, career_url=url, config=company_config)
     
     @classmethod
-    def _extract_company_from_url(cls, url: str) -> str:
-        """Extract company name from URL"""
-        if not url:
-            return 'unknown'
-        
-        from urllib.parse import urlparse
-        host = urlparse(url).netloc.lower()
-        
-        # Remove common prefixes
-        host = host.replace('www.', '').replace('careers.', '').replace('jobs.', '')
-        
-        # Remove TLD
-        parts = host.split('.')
-        if len(parts) > 0:
-            return parts[0]
-        
-        return host
+    def is_supported_ats(cls, ats_type: str) -> bool:
+        """Check if ATS type is supported"""
+        return ats_type in cls.SUPPORTED_ATS
     
     @classmethod
     def get_supported_ats(cls) -> List[str]:
         """Get list of supported ATS types"""
-        return list(cls._collectors.keys())
+        return list(cls.SUPPORTED_ATS)
 
 
 def register_collector(ats_name: str):
@@ -226,96 +189,25 @@ def register_collector(ats_name: str):
     return decorator
 
 
-# Import and register all collectors
+# Import and register ATS collectors ONLY
 from .greenhouse import GreenhouseCollector
 from .lever import LeverCollector
 from .smartrecruiters import SmartRecruitersCollector
-from .dynamic_scraper import DynamicScraper, ScrapeResult
+from .icims_collector import ICimsCollector
+from .ats_extractor import WorkdayExtractor, SuccessFactorsExtractor
 
-# Register collectors
+# Register ATS collectors ONLY
 CollectorFactory.register('greenhouse', GreenhouseCollector)
 CollectorFactory.register('lever', LeverCollector)
 CollectorFactory.register('smartrecruiters', SmartRecruitersCollector)
-
-
-class DynamicScraperCollector:
-    """
-    Wrapper to use DynamicScraper as a standard collector.
-    
-    This allows Playwright-based scraping through the same interface
-    as other collectors.
-    """
-    
-    ATS_NAME = "dynamic"
-    
-    def __init__(self, career_url: str, company_name: str, config: Dict = None):
-        self.career_url = career_url
-        self.company_name = company_name
-        self.config = config or {}
-        self._scraper = DynamicScraper(timeout=30000, headless=True)
-    
-    @property
-    def company_slug(self) -> str:
-        from urllib.parse import urlparse
-        return urlparse(self.career_url).netloc.split('.')[0]
-    
-    def fetch_jobs(self) -> List:
-        """Fetch jobs using Playwright dynamic scraping"""
-        result = self._scraper.scrape(self.career_url, self.company_name)
-        
-        if result.success:
-            return result.jobs
-        
-        # Log error but return empty list
-        logger.warning(f"DynamicScraper returned no jobs for {self.company_name}: {result.error}")
-        return []
-    
-    def close(self):
-        """Clean up resources"""
-        self._scraper.close()
-
-
-class ResolvedCollector:
-    """
-    Collector that wraps pre-resolved job results.
-    
-    This is used by the JobSourceResolver to return already-fetched jobs
-    without requiring another fetch.
-    """
-    
-    ATS_NAME = "resolved"
-    
-    def __init__(self, jobs, company_name: str, method: str = 'api'):
-        from .base import Job
-        self._jobs = jobs  # type: List[Job]
-        self.company_name = company_name
-        self.method = method
-        self.company_slug = company_name.lower().replace(' ', '-')
-    
-    def fetch_jobs(self):
-        from .base import Job
-        """Return the pre-resolved jobs"""
-        logger.info(f"ResolvedCollector: Returning {len(self._jobs)} jobs (method: {self.method})")
-        return self._jobs  # type: List[Job]
+CollectorFactory.register('icims', ICimsCollector)
+CollectorFactory.register('workday', WorkdayExtractor)
+CollectorFactory.register('successfactors', SuccessFactorsExtractor)
 
 
 if __name__ == "__main__":
-    # Test factory
     print("=" * 60)
-    print("COLLECTOR FACTORY TEST")
+    print("COLLECTOR FACTORY - ATS-ONLY MODE")
     print("=" * 60)
-    
-    test_urls = [
-        ('https://www.unilever.com/careers/', 'Unilever'),
-        ('https://grab.com/careers/', 'Grab'),
-        ('https://www.dhl.com/en/careers.html', 'DHL'),
-    ]
-    
-    for url, expected in test_urls:
-        collector = CollectorFactory.create(url, expected)
-        if collector:
-            print(f"\n[OK] {expected}: {type(collector).__name__}")
-            print(f"    ATS: {collector.ATS_NAME}")
-            print(f"    Slug: {collector.company_slug}")
-        else:
-            print(f"\n[FAIL] {expected}: No collector available")
+    print(f"\nSupported ATS types: {CollectorFactory.get_supported_ats()}")
+    print("\n⚠️  NO FALLBACK - Unknown ATS will be SKIPPED")
