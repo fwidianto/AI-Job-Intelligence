@@ -1,30 +1,35 @@
 """
 Job Intelligence Platform - Main Entry Point
 
-This script orchestrates the entire job intelligence workflow:
-1. Load configuration
-2. Collect jobs from ATS platforms
-3. Score jobs against user profile
-4. Store results in Google Sheets
-5. Send email notifications
+Phase 2: Focus on job discovery at scale
+- ATS auto-detection
+- Generic scraper fallback
+- Job board integration
+- Daily intelligence mode
 """
 
 import os
 import sys
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import yaml
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.collectors import GreenhouseCollector, LeverCollector, SmartRecruitersCollector
-from src.collectors.base import Job, CollectorError
+from src.collectors import (
+    CollectorFactory,
+    GenericScraper,
+    Job,
+    CollectorError
+)
+from src.collectors.job_boards import collect_from_all_boards, JobStreetCollector, GlintsCollector, KalibrrCollector
 from src.scorer import JobScorer, MatchResult, MatchStatus
 from src.sheets import SheetConfig, create_sheets_manager, MockSheetsManager
 from src.notifier import create_notifier, MockEmailNotifier
-from src.utils import safe_text, SafeLogger, print_banner
+from src.utils import safe_text
+from src.detectors.ats_detector import ATSDetector, detect_ats
 
 # Create logs directory if it doesn't exist
 logs_dir = os.path.join(os.path.dirname(__file__), '..', 'logs')
@@ -156,8 +161,7 @@ class JobIntelligencePlatform:
         """
         Run the complete job intelligence workflow.
         
-        Args:
-            force_email: Force sending email even if no new matches
+        Phase 2: Focus on job discovery at scale.
         """
         logger.info("=" * 60)
         logger.info("Starting Job Intelligence Platform")
@@ -167,94 +171,72 @@ class JobIntelligencePlatform:
         all_jobs = []
         errors = []
         
-        # Process each company
-        for company in self.companies:
-            ats = company.get('ats', 'other')
-            name = company.get('name', 'Unknown')
+        # Phase 2: Collect from job boards first (broad coverage)
+        logger.info("[PHASE 2] Collecting from job boards...")
+        board_jobs = self._collect_from_job_boards()
+        all_jobs.extend(board_jobs)
+        logger.info("[BOARD] Collected %d jobs from job boards", len(board_jobs))
+        
+        # Phase 2: Collect from company career pages with auto-detection
+        logger.info("[PHASE 2] Collecting from company career pages...")
+        company_jobs = self._collect_from_companies()
+        all_jobs.extend(company_jobs)
+        logger.info("[COMPANY] Collected %d jobs from company pages", len(company_jobs))
+        
+        # Score all jobs
+        logger.info("[SCORING] Scoring %d jobs...", len(all_jobs))
+        scored_jobs = []
+        for item in all_jobs:
+            job = item['job'] if isinstance(item, dict) else item
+            match_result = self.scorer.score_job(job)
+            job.match_score = match_result.score
             
-            # Skip companies without working collectors
-            if ats not in ['greenhouse', 'lever', 'smartrecruiters']:
-                logger.info("[SKIP] Skipping %s (ATS: %s - no collector)", name, ats)
-                continue
+            job_data = {
+                'job_id': job.job_id,
+                'date_found': datetime.now().strftime('%Y-%m-%d'),
+                'company': job.company,
+                'title': job.title,
+                'location': job.location,
+                'url': job.url,
+                'source': job.source,
+                'match_status': match_result.status.value,
+                'match_score': match_result.score,
+                'match_reasons': ' | '.join(match_result.reasons),
+                'matched_skills': ', '.join(match_result.matched_skills),
+            }
             
-            logger.info("[PROCESS] Company: %s (ATS: %s)", name, ats)
+            scored_jobs.append({
+                'job': job,
+                'result': match_result,
+                'data': job_data
+            })
             
-            try:
-                # Get collector
-                collector = self._get_collector(company)
-                if not collector:
-                    continue
-                
-                # Fetch jobs
-                jobs = collector.fetch_jobs()
-                logger.info("[FOUND] Jobs: %d", len(jobs))
-                
-                # Score and process each job
-                for job in jobs:
-                    # Score job
-                    match_result = self.scorer.score_job(job)
-                    job.match_score = match_result.score
-                    
-                    # Prepare job data for storage
-                    job_data = {
-                        'job_id': job.job_id,
-                        'date_found': datetime.now().strftime('%Y-%m-%d'),
-                        'company': job.company,
-                        'title': job.title,
-                        'location': job.location,
-                        'url': job.url,
-                        'source': job.source,
-                        'match_status': match_result.status.value,
-                        'match_score': match_result.score,
-                        'match_reasons': ' | '.join(match_result.reasons),
-                        'matched_skills': ', '.join(match_result.matched_skills),
-                    }
-                    
-                    # Add to collection
-                    all_jobs.append({
-                        'job': job,
-                        'result': match_result,
-                        'data': job_data
-                    })
-                    
-                    # Log match
-                    if match_result.status == MatchStatus.YES:
-                        logger.info("[MATCH] [YES] %s at %s (%d/100)", 
-                                  job.title, job.company, match_result.score)
-                    elif match_result.status == MatchStatus.MAYBE:
-                        logger.info("[MATCH] [MAYBE] %s at %s (%d/100)", 
-                                  job.title, job.company, match_result.score)
-                
-            except CollectorError as e:
-                logger.error("[ERROR] Company: %s - %s", name, str(e))
-                errors.append(f"{name}: {e}")
-            except Exception as e:
-                logger.error("[ERROR] Unexpected error for %s: %s", name, str(e))
-                errors.append(f"{name}: {e}")
+            # Log high matches
+            if match_result.status == MatchStatus.YES and match_result.score >= 75:
+                logger.info("[MATCH] %s at %s (%d/100)", 
+                          job.title, job.company, int(match_result.score))
         
         # Summary
         logger.info("\n" + "=" * 60)
         logger.info("SUMMARY")
         logger.info("=" * 60)
         
-        yes_matches = [j for j in all_jobs if j['result'].status == MatchStatus.YES]
-        maybe_matches = [j for j in all_jobs if j['result'].status == MatchStatus.MAYBE]
+        yes_matches = [j for j in scored_jobs if j['result'].status == MatchStatus.YES]
+        maybe_matches = [j for j in scored_jobs if j['result'].status == MatchStatus.MAYBE]
         
-        logger.info("Total jobs collected: %d", len(all_jobs))
+        logger.info("Total jobs collected: %d", len(scored_jobs))
         logger.info("YES matches: %d", len(yes_matches))
         logger.info("MAYBE matches: %d", len(maybe_matches))
         
         if errors:
             logger.warning("Errors encountered: %d", len(errors))
-            for error in errors:
-                logger.warning("  - %s", error)
         
         # Store in Google Sheets
-        new_jobs = self._store_jobs(all_jobs)
+        new_jobs = self._store_jobs(scored_jobs)
         logger.info("New jobs added to sheet: %d", new_jobs)
         
         # Send email notification
-        high_matches = [j for j in all_jobs if j['result'].score >= 80 and j['result'].status == MatchStatus.YES]
+        high_matches = [j for j in scored_jobs if j['result'].score >= 75 and j['result'].status == MatchStatus.YES]
         
         if high_matches or force_email:
             job_dicts = [j['data'] for j in high_matches]
@@ -268,13 +250,192 @@ class JobIntelligencePlatform:
         logger.info("=" * 60)
         
         return {
-            'total_jobs': len(all_jobs),
+            'total_jobs': len(scored_jobs),
             'yes_matches': len(yes_matches),
             'maybe_matches': len(maybe_matches),
             'new_jobs': new_jobs,
             'errors': len(errors),
             'duration_seconds': duration
         }
+    
+    def run_daily(self):
+        """
+        Run daily intelligence mode.
+        
+        Focus: Discover relevant analyst jobs at scale.
+        Output: Clean list of relevant jobs with scores.
+        """
+        logger.info("=" * 60)
+        logger.info("DAILY INTELLIGENCE MODE")
+        logger.info("=" * 60)
+        
+        start_time = datetime.now()
+        all_jobs = []
+        
+        # 1. Collect from job boards
+        logger.info("[STEP 1] Collecting from job boards...")
+        try:
+            board_jobs = collect_from_all_boards()
+            logger.info("Found %d jobs from job boards", len(board_jobs))
+            all_jobs.extend(board_jobs)
+        except Exception as e:
+            logger.error("Job board collection failed: %s", str(e))
+        
+        # 2. Collect from companies with auto-detection
+        logger.info("[STEP 2] Collecting from company career pages...")
+        for company in self.companies:
+            name = company.get('name', 'Unknown')
+            url = company.get('career_url', '')
+            
+            if not url:
+                continue
+            
+            try:
+                # Auto-detect ATS
+                detection = detect_ats(url)
+                ats = detection['ats']
+                
+                if ats == 'custom' or detection['confidence'] < 0.7:
+                    # Use generic scraper for custom sites
+                    logger.info("[SCRAP] %s: Using generic scraper", name)
+                    scraper = GenericScraper(name, url, company)
+                    jobs = scraper.fetch_jobs()
+                else:
+                    # Use factory to create correct collector
+                    logger.info("[COLLECT] %s: Detected %s", name, ats)
+                    collector = CollectorFactory.create(url, name, company)
+                    if collector:
+                        jobs = collector.fetch_jobs()
+                    else:
+                        jobs = []
+                
+                all_jobs.extend(jobs)
+                logger.info("[OK] %s: %d jobs", name, len(jobs))
+                
+            except Exception as e:
+                logger.warning("[FAIL] %s: %s", name, str(e)[:60])
+        
+        # 3. Score all jobs
+        logger.info("[STEP 3] Scoring %d jobs...", len(all_jobs))
+        
+        scored_jobs = []
+        for job in all_jobs:
+            result = self.scorer.score_job(job)
+            job.match_score = result.score
+            scored_jobs.append((job, result))
+        
+        # 4. Sort by score (highest first)
+        scored_jobs.sort(key=lambda x: x[1].score, reverse=True)
+        
+        # 5. Print daily report
+        print("\n" + "=" * 80)
+        print("DAILY INTELLIGENCE REPORT")
+        print("=" * 80)
+        print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        print(f"Total jobs discovered: {len(scored_jobs)}")
+        print("-" * 80)
+        
+        # Show top jobs
+        top_jobs = [j for j in scored_jobs if j[1].status == MatchStatus.YES]
+        
+        print(f"\nRELEVANT JOBS (YES matches): {len(top_jobs)}")
+        print("-" * 80)
+        
+        for i, (job, result) in enumerate(top_jobs[:30], 1):
+            print(f"\n{i}. {job.title}")
+            print(f"   Company: {job.company}")
+            print(f"   Location: {job.location}")
+            print(f"   Score: {int(result.score)}/100")
+            print(f"   URL: {job.url}")
+            if result.matched_skills:
+                print(f"   Skills: {', '.join(result.matched_skills[:5])}")
+        
+        # Show maybe matches
+        maybe_jobs = [j for j in scored_jobs if j[1].status == MatchStatus.MAYBE]
+        
+        print(f"\n\nMAYBE RELEVANT: {len(maybe_jobs)}")
+        print("-" * 80)
+        
+        for i, (job, result) in enumerate(maybe_jobs[:20], 1):
+            print(f"{i}. {job.title} at {job.company} ({int(result.score)}/100)")
+        
+        # 6. Store in sheets
+        job_dicts = []
+        for job, result in scored_jobs:
+            job_dicts.append({
+                'job_id': job.job_id,
+                'date_found': datetime.now().strftime('%Y-%m-%d'),
+                'company': job.company,
+                'title': job.title,
+                'location': job.location,
+                'url': job.url,
+                'source': job.source,
+                'match_status': result.status.value,
+                'match_score': int(result.score),
+                'match_reasons': ' | '.join(result.reasons),
+                'matched_skills': ', '.join(result.matched_skills),
+            })
+        
+        new_count = self._store_jobs([{'job': j, 'result': r, 'data': d} 
+                                     for (j, r), d in zip(scored_jobs, job_dicts)])
+        
+        # 7. Summary
+        duration = (datetime.now() - start_time).total_seconds()
+        
+        print("\n" + "=" * 80)
+        print("DAILY SUMMARY")
+        print("=" * 80)
+        print(f"Total jobs discovered: {len(scored_jobs)}")
+        print(f"Relevant (YES): {len(top_jobs)}")
+        print(f"Maybe relevant: {len(maybe_jobs)}")
+        print(f"New jobs added to sheet: {new_count}")
+        print(f"Duration: {duration:.1f} seconds")
+        print("=" * 80)
+        
+        return {
+            'total_jobs': len(scored_jobs),
+            'yes_matches': len(top_jobs),
+            'maybe_matches': len(maybe_jobs),
+            'new_jobs': new_count,
+            'duration_seconds': duration
+        }
+    
+    def _collect_from_job_boards(self) -> List[Job]:
+        """Collect jobs from all job boards"""
+        jobs = []
+        try:
+            jobs.extend(collect_from_all_boards())
+        except Exception as e:
+            logger.error("Failed to collect from job boards: %s", str(e))
+        return jobs
+    
+    def _collect_from_companies(self) -> List[Job]:
+        """Collect jobs from companies with auto-detection"""
+        jobs = []
+        
+        for company in self.companies:
+            name = company.get('name', 'Unknown')
+            url = company.get('career_url', '')
+            
+            if not url:
+                continue
+            
+            try:
+                detection = detect_ats(url)
+                ats = detection['ats']
+                
+                if ats == 'custom':
+                    scraper = GenericScraper(name, url, company)
+                    jobs.extend(scraper.fetch_jobs())
+                else:
+                    collector = CollectorFactory.create(url, name, company)
+                    if collector:
+                        jobs.extend(collector.fetch_jobs())
+                        
+            except Exception as e:
+                logger.debug("Failed for %s: %s", name, str(e))
+        
+        return jobs
     
     def _get_collector(self, company: Dict[str, Any]):
         """Get the appropriate collector for a company"""
@@ -459,21 +620,39 @@ def main():
     
     parser = argparse.ArgumentParser(description='Job Intelligence Platform')
     parser.add_argument('--config', '-c', default='config', help='Config directory path')
+    parser.add_argument('--daily', action='store_true', help='Run daily intelligence mode')
     parser.add_argument('--test-collectors', action='store_true', help='Test collectors only')
     parser.add_argument('--test-scorer', action='store_true', help='Test scorer only')
     parser.add_argument('--validate-companies', action='store_true', help='Validate company configurations')
+    parser.add_argument('--detect-ats', metavar='URL', help='Detect ATS for a URL')
     parser.add_argument('--force-email', action='store_true', help='Force email notification')
     parser.add_argument('--dry-run', action='store_true', help='Run without saving to sheets')
     
     args = parser.parse_args()
     
     try:
+        # Handle ATS detection
+        if args.detect_ats:
+            result = detect_ats(args.detect_ats)
+            print("\n" + "=" * 60)
+            print("ATS DETECTION RESULT")
+            print("=" * 60)
+            print(f"URL: {args.detect_ats}")
+            print(f"Detected ATS: {result['ats']}")
+            print(f"Confidence: {result['confidence']:.2f}")
+            print(f"Company Slug: {result['company_slug']}")
+            if result['api_url']:
+                print(f"API URL: {result['api_url']}")
+            return
+        
         # Initialize platform
         platform = JobIntelligencePlatform(config_dir=args.config)
         
         # Run requested action
         if args.validate_companies:
             platform.validate_companies()
+        elif args.daily:
+            platform.run_daily()
         elif args.test_collectors:
             platform.test_collectors()
         elif args.test_scorer:
