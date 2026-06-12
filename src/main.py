@@ -22,7 +22,14 @@ from src.collectors import (
     CollectorFactory,
     GenericScraper,
     Job,
-    CollectorError
+    CollectorError,
+    GreenhouseCollector,
+    LeverCollector,
+    SmartRecruitersCollector,
+    JobSourceResolver,
+    SearchJobDiscovery,
+    JobIntelligenceEngine,
+    ProfileConfig,
 )
 from src.collectors.job_boards import collect_from_all_boards, JobStreetCollector, GlintsCollector, KalibrrCollector
 from src.scorer import JobScorer, MatchResult, MatchStatus
