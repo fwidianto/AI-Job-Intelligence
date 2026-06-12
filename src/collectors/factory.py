@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from ..detectors.ats_detector import ATSDetector, detect_ats
 
 if TYPE_CHECKING:
-    from .base import BaseCollector
+    from .base import BaseCollector, Job
     from .dynamic_scraper import DynamicScraper
 
 logger = logging.getLogger(__name__)
@@ -164,7 +164,19 @@ class CollectorFactory:
         name = company_config.get('name', 'Unknown')
         url = company_config.get('career_url', '')
         
-        # Use configured ATS or auto-detect
+        # Use JobSourceResolver for smart source detection (modern companies)
+        use_resolver = company_config.get('use_resolver', True)
+        
+        if use_resolver:
+            from .source_resolver import JobSourceResolver
+            resolver = JobSourceResolver()
+            result = resolver.resolve(url, name)
+            
+            if result.success and result.jobs:
+                logger.info(f"Source resolver found {len(result.jobs)} jobs for {name}")
+                return ResolvedCollector(result.jobs, name, result.method_used)
+        
+        # Fall back to standard creation
         ats = company_config.get('ats')
         
         if ats and ats not in ['other', 'manual']:
@@ -261,6 +273,30 @@ class DynamicScraperCollector:
     def close(self):
         """Clean up resources"""
         self._scraper.close()
+
+
+class ResolvedCollector:
+    """
+    Collector that wraps pre-resolved job results.
+    
+    This is used by the JobSourceResolver to return already-fetched jobs
+    without requiring another fetch.
+    """
+    
+    ATS_NAME = "resolved"
+    
+    def __init__(self, jobs, company_name: str, method: str = 'api'):
+        from .base import Job
+        self._jobs = jobs  # type: List[Job]
+        self.company_name = company_name
+        self.method = method
+        self.company_slug = company_name.lower().replace(' ', '-')
+    
+    def fetch_jobs(self):
+        from .base import Job
+        """Return the pre-resolved jobs"""
+        logger.info(f"ResolvedCollector: Returning {len(self._jobs)} jobs (method: {self.method})")
+        return self._jobs  # type: List[Job]
 
 
 if __name__ == "__main__":
